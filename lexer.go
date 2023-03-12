@@ -68,6 +68,7 @@ func (t Token) End() uint {
 func (t Token) SkippedTokens() []Token {
 	return t.skippedTokens
 }
+
 // }}}
 
 // TokenDefinition {{{
@@ -92,6 +93,7 @@ func NewTokenDefinition(kind string, regex string, skip bool) TokenDefinition {
 		skip:  skip,
 	}
 }
+
 // }}}
 
 // Lexer {{{
@@ -109,36 +111,23 @@ func (l *Lexer) Define(kind string, regex string, skip bool) {
 	l.tokenDefinitions = append(l.tokenDefinitions, NewTokenDefinition(kind, regex, skip))
 }
 
-func (l *Lexer) CreateScanner(src string) Scanner {
-	return Scanner{
-		&scannerData{
-			src:         src,
-			pos:         0,
-			definitions: l,
-		},
-	}
-}
-// }}}
-
-// Scanner {{{
-type scannerData struct {
-	src         string
-	pos         uint
-	definitions *Lexer
-}
-type Scanner struct {
-	*scannerData
+func (l *Lexer) DefineKeyword(kind string) {
+	l.Define(kind, fmt.Sprintf(`%s\b`, kind), false)
 }
 
-func (l Scanner) ReadTokenAt(src string, pos uint) Token {
+func (l *Lexer) DefineOperator(kind string) {
+	// first let's escape any special characters in the regex:
+	newRe := regexp.QuoteMeta(kind)
+	l.Define(kind, newRe, false)
+}
+
+func (l Lexer) ReadTokenAt(src string, pos uint) Token {
 	// first check if we're at the end of the string
-	fmt.Printf("ReadTokenAt: %d/%d\n", pos, len(src))
 	if pos >= uint(len(src)) {
-		fmt.Printf("ReadTokenAt: EOF\n")
 		return NewToken("EOF", "", pos, false)
 	}
 
-	for _, tokenDefinition := range l.definitions.tokenDefinitions {
+	for _, tokenDefinition := range l.tokenDefinitions {
 		regex := tokenDefinition.regex
 		match := regex.FindStringSubmatch((src)[pos:])
 		if match != nil {
@@ -171,7 +160,7 @@ func (l Scanner) ReadTokenAt(src string, pos uint) Token {
 	}
 }
 
-func (l Scanner) ReadToken(src string, pos uint) Token {
+func (l Lexer) ReadToken(src string, pos uint) Token {
 	skippedTokens := []Token{}
 	for {
 		tkn := l.ReadTokenAt(src, pos)
@@ -185,8 +174,30 @@ func (l Scanner) ReadToken(src string, pos uint) Token {
 	}
 }
 
+func (l *Lexer) CreateScanner(src string) Scanner {
+	return Scanner{
+		&scannerData{
+			src:         src,
+			pos:         0,
+			definitions: l,
+		},
+	}
+}
+
+// }}}
+
+// Scanner {{{
+type scannerData struct {
+	src         string
+	pos         uint
+	definitions *Lexer
+}
+type Scanner struct {
+	*scannerData
+}
+
 func (l Scanner) Peek() Token {
-	return l.ReadToken(l.src, l.pos)
+	return l.definitions.ReadToken(l.src, l.pos)
 }
 
 func (l Scanner) Next() Token {
@@ -228,4 +239,5 @@ func (l Scanner) MarkUnread(t Token) {
 func (l Scanner) IsEOF() bool {
 	return l.pos >= uint(len(l.src))
 }
+
 // }}}
